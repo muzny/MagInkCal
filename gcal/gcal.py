@@ -7,7 +7,7 @@ credentials.json and token.pickle in the same folder as this file. If not, run q
 
 from __future__ import print_function
 import datetime as dt
-import pickle
+import json
 import os.path
 import pathlib
 from googleapiclient.discovery import build
@@ -15,40 +15,51 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import logging
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+READ_API = 'https://www.googleapis.com/auth/calendar.readonly'
+SCOPES = [READ_API]
+
 
 class GcalHelper:
 
-    def __init__(self):
+    def __init__(self, calendar_id: str = "primary"):
         self.logger = logging.getLogger('maginkcal')
+
         # Initialise the Google Calendar using the provided credentials and token
-        SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
         self.currPath = str(pathlib.Path(__file__).parent.absolute())
 
         creds = None
-        # The file token.pickle stores the user's access and refresh tokens, and is
+        # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
         # time.
-        if os.path.exists(self.currPath + '/token.pickle'):
-            with open(self.currPath + '/token.pickle', 'rb') as token:
-                creds = pickle.load(token)
+        if os.path.exists("token.json"):
+            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self.currPath + '/credentials.json', SCOPES)
+                    "credentials.json", SCOPES
+                )
                 creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open(self.currPath + '/token.pickle', 'wb') as token:
-                pickle.dump(creds, token)
+                # Save the credentials for the next run
+                with open("token.json", "w") as token:
+                    token.write(creds.to_json())
 
-        self.service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
+        self.service = build("calendar", "v3", credentials=creds)
+        self.cal_id = calendar_id
+        self.logger.info(f"Set calendar id to: {self.cal_id}")
 
     def list_calendars(self):
         # helps to retrieve ID for calendars within the account
         # calendar IDs added to config.json will then be queried for retrieval of events
-        self.logger.info('Getting list of calendars')
+        self.logger.info('Getting list of calendars: ')
         calendars_result = self.service.calendarList().list().execute()
         calendars = calendars_result.get('items', [])
         if not calendars:
@@ -56,7 +67,7 @@ class GcalHelper:
         for calendar in calendars:
             summary = calendar['summary']
             cal_id = calendar['id']
-            self.logger.info("%s\t%s" % (summary, cal_id))
+            self.logger.info(f"{summary}\t{cal_id}")
 
     def to_datetime(self, isoDatetime, localTZ):
         # replace Z with +00:00 is a workaround until datetime library decides what to do with the Z notation

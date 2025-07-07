@@ -1,5 +1,8 @@
+# https://developers.google.com/workspace/calendar/api/quickstart/python#set-up-environment
+
 import datetime
 import os.path
+import json
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -34,16 +37,31 @@ def main():
     with open("token.json", "w") as token:
       token.write(creds.to_json())
 
+  cal_id = "primary"
+  if os.path.exists("calendar_settings.json"):
+      with open("calendar_settings.json", "r") as file:
+          settings = json.load(file)
+          cal_id = settings["calendarId"]
+  else:
+      print("Reading from primary calendar")
+
   try:
     service = build("calendar", "v3", credentials=creds)
 
     # Call the Calendar API
     now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+
+    print("Getting possible calendars")
+    cals = service.calendarList().list().execute()
+    print("Calendars:\n", cals.get("items", []))
+    print()
+    print("Using:", cal_id)
+
     print("Getting the upcoming 10 events")
     events_result = (
         service.events()
         .list(
-            calendarId="primary",
+            calendarId=cal_id,
             timeMin=now,
             maxResults=10,
             singleEvents=True,
